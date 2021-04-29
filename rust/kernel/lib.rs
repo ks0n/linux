@@ -68,6 +68,9 @@ pub mod user_ptr;
 pub use crate::error::{Error, Result};
 pub use crate::types::{CStr, Mode};
 
+#[cfg(CONFIG_SPI)]
+pub mod spi;
+
 /// Page size defined in terms of the `PAGE_SHIFT` macro from C.
 ///
 /// [`PAGE_SHIFT`]: ../../../include/asm-generic/page.h
