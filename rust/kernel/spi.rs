@@ -5,18 +5,49 @@ use crate::c_types;
 use crate::CStr;
 use crate::error::{Error, KernelResult};
 
-type ProbeMethod = unsafe extern "C" fn(*mut bindings::spi_device) -> i32;
-type RemoveMethod = ProbeMethod;
-type ShutdownMethod = unsafe extern "C" fn (*mut bindings::spi_device) -> ();
-// FIXME: Rustify this
+pub struct SpiDevice(*mut bindings::spi_device);
+
+impl SpiDevice {
+    pub fn from_ptr(dev: *mut bindings::spi_device) -> Self {
+        SpiDevice(dev)
+    }
+}
+
+type SpiMethod = unsafe extern "C" fn(*mut bindings::spi_device) -> c_types::c_int;
+type SpiMethodVoid = unsafe extern "C" fn(*mut bindings::spi_device) -> ();
 
 pub struct Registration {
     this_module: &'static crate::ThisModule,
     name: CStr<'static>,
-    probe: Option<ProbeMethod>,
-    remove: Option<RemoveMethod>,
-    shutdown: Option<ShutdownMethod>,
+    probe: Option<SpiMethod>,
+    remove: Option<SpiMethod>,
+    shutdown: Option<SpiMethodVoid>,
     spi_driver: Option<bindings::spi_driver>,
+}
+
+#[macro_export]
+macro_rules! spi_method {
+    (fn $method_name:ident ($device_name:ident : SpiDevice) -> KernelResult $block:block) => {
+        unsafe extern "C" fn $method_name(dev: *mut kernel::bindings::spi_device) -> kernel::c_types::c_int {
+            use kernel::spi::SpiDevice;
+
+            fn inner($device_name: SpiDevice) -> KernelResult $block
+
+            match inner(SpiDevice::from_ptr(dev)) {
+                Ok(_) => 0,
+                Err(e) => e.to_kernel_errno(),
+            }
+        }
+    };
+    (fn $method_name:ident ($device_name:ident : SpiDevice) $block:block) => {
+        unsafe extern "C" fn $method_name(dev: *mut kernel::bindings::spi_device) {
+            use kernel::spi::SpiDevice;
+
+            fn inner($device_name: SpiDevice) $block
+
+            inner(SpiDevice::from_ptr(dev))
+        }
+    };
 }
 
 impl Registration {
@@ -31,7 +62,7 @@ impl Registration {
         }
     }
 
-    pub fn with_probe(mut self, func: ProbeMethod) -> Self {
+    pub fn with_probe(mut self, func: SpiMethod) -> Self {
         self.probe = Some(func);
         self
     } // FIXME: Add remove and shutdown
