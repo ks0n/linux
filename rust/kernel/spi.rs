@@ -13,45 +13,17 @@ impl SpiDevice {
     }
 }
 
-type SpiMethod = unsafe extern "C" fn(*mut bindings::spi_device) -> c_types::c_int;
-type SpiMethodVoid = unsafe extern "C" fn(*mut bindings::spi_device) -> ();
-
 pub struct Registration {
     this_module: &'static crate::ThisModule,
     name: CStr<'static>,
     probe: Option<SpiMethod>,
     remove: Option<SpiMethod>,
     shutdown: Option<SpiMethodVoid>,
-    spi_driver: Option<bindings::spi_driver>,
-}
-
-#[macro_export]
-macro_rules! spi_method {
-    (fn $method_name:ident ($device_name:ident : SpiDevice) -> KernelResult $block:block) => {
-        unsafe extern "C" fn $method_name(dev: *mut kernel::bindings::spi_device) -> kernel::c_types::c_int {
-            use kernel::spi::SpiDevice;
-
-            fn inner($device_name: SpiDevice) -> KernelResult $block
-
-            match inner(SpiDevice::from_ptr(dev)) {
-                Ok(_) => 0,
-                Err(e) => e.to_kernel_errno(),
-            }
-        }
-    };
-    (fn $method_name:ident ($device_name:ident : SpiDevice) $block:block) => {
-        unsafe extern "C" fn $method_name(dev: *mut kernel::bindings::spi_device) {
-            use kernel::spi::SpiDevice;
-
-            fn inner($device_name: SpiDevice) $block
-
-            inner(SpiDevice::from_ptr(dev))
-        }
-    };
+    spi_driver: bindings::spi_driver,
 }
 
 impl Registration {
-    pub fn new(this_module: &'static crate::ThisModule, name: CStr<'static>) -> Self { // hspi_driver: bindings::spi_driver) -> Self {
+    pub fn new(this_module: &'static crate::ThisModule, name: CStr<'static>) -> Self {
         Registration {
             this_module,
             name,
@@ -94,4 +66,32 @@ impl Drop for Registration {
     fn drop(&mut self) {
         unsafe { bindings::driver_unregister(&mut self.spi_driver.unwrap().driver) } // FIXME: No unwrap? But it's safe?
     }
+}
+
+type SpiMethod = unsafe extern "C" fn(*mut bindings::spi_device) -> c_types::c_int;
+type SpiMethodVoid = unsafe extern "C" fn(*mut bindings::spi_device) -> ();
+
+#[macro_export]
+macro_rules! spi_method {
+    (fn $method_name:ident ($device_name:ident : SpiDevice) -> KernelResult $block:block) => {
+        unsafe extern "C" fn $method_name(dev: *mut kernel::bindings::spi_device) -> kernel::c_types::c_int {
+            use kernel::spi::SpiDevice;
+
+            fn inner($device_name: SpiDevice) -> KernelResult $block
+
+            match inner(SpiDevice::from_ptr(dev)) {
+                Ok(_) => 0,
+                Err(e) => e.to_kernel_errno(),
+            }
+        }
+    };
+    (fn $method_name:ident ($device_name:ident : SpiDevice) $block:block) => {
+        unsafe extern "C" fn $method_name(dev: *mut kernel::bindings::spi_device) {
+            use kernel::spi::SpiDevice;
+
+            fn inner($device_name: SpiDevice) $block
+
+            inner(SpiDevice::from_ptr(dev))
+        }
+    };
 }
