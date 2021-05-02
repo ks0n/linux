@@ -19,7 +19,7 @@ pub struct Registration {
     probe: Option<SpiMethod>,
     remove: Option<SpiMethod>,
     shutdown: Option<SpiMethodVoid>,
-    spi_driver: bindings::spi_driver,
+    spi_driver: Option<bindings::spi_driver>,
 }
 
 impl Registration {
