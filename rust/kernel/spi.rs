@@ -11,6 +11,10 @@ impl SpiDevice {
     pub fn from_ptr(dev: *mut bindings::spi_device) -> Self {
         SpiDevice(dev)
     }
+
+    pub fn to_ptr(&mut self) -> *mut bindings::spi_device {
+        self.0
+    }
 }
 
 pub struct DriverRegistration {
@@ -94,4 +98,34 @@ macro_rules! spi_method {
             inner(SpiDevice::from_ptr(dev))
         }
     };
+}
+
+pub struct Spi;
+
+impl Spi {
+    pub fn write_then_read(dev: &mut SpiDevice, tx_buf: &[u8], n_tx: usize, rx_buf: &mut [u8], n_rx: usize) -> KernelResult {
+        let res = unsafe {
+            bindings::spi_write_then_read(dev.to_ptr(),
+            tx_buf.as_ptr() as *const c_types::c_void,
+            n_tx as c_types::c_uint,
+            rx_buf.as_ptr() as *mut c_types::c_void,
+            n_rx as c_types::c_uint,
+            )
+        };
+
+        match res {
+            0 => Ok(()), // 0 indicates a valid transfer,
+            err => Err(Error::from_kernel_errno(err)), // A negative number indicates an error
+        }
+    }
+
+    #[inline]
+    pub fn write(dev: &mut SpiDevice, tx_buf: &[u8], n_tx: usize) -> KernelResult {
+        Spi::write_then_read(dev, tx_buf, n_tx, &mut [0u8;0], 0)
+    }
+
+    #[inline]
+    pub fn read(dev: &mut SpiDevice, rx_buf: &mut [u8], n_rx: usize) -> KernelResult {
+        Spi::write_then_read(dev, &[0u8;0], 0, rx_buf, n_rx)
+    }
 }
