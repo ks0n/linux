@@ -13,7 +13,7 @@ impl SpiDevice {
     }
 }
 
-pub struct Registration {
+pub struct DriverRegistration {
     this_module: &'static crate::ThisModule,
     name: CStr<'static>,
     probe: Option<SpiMethod>,
@@ -22,9 +22,9 @@ pub struct Registration {
     spi_driver: Option<bindings::spi_driver>,
 }
 
-impl Registration {
+impl DriverRegistration {
     pub fn new(this_module: &'static crate::ThisModule, name: CStr<'static>) -> Self {
-        Registration {
+        DriverRegistration {
             this_module,
             name,
             probe: None,
@@ -62,7 +62,7 @@ impl Registration {
     }
 }
 
-impl Drop for Registration {
+impl Drop for DriverRegistration {
     fn drop(&mut self) {
         unsafe { bindings::driver_unregister(&mut self.spi_driver.unwrap().driver) } // FIXME: No unwrap? But it's safe?
     }
