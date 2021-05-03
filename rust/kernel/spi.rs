@@ -53,7 +53,7 @@ impl DriverRegistration {
         self
     } // FIXME: Add remove and shutdown
 
-    pub fn register(self: Pin<&mut Box<Self>>) -> KernelResult {
+    pub fn register(self: Pin<&mut Self>) -> KernelResult {
         let mut spi_driver = bindings::spi_driver::default();
         spi_driver.driver.name = self.name.as_ptr() as *const c_types::c_char;
         spi_driver.probe = self.probe;
