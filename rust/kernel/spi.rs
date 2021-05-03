@@ -7,7 +7,6 @@ use crate::error::{Error, KernelResult};
 pub struct Registration {
     this_module: &'static crate::ThisModule,
     spi_driver: bindings::spi_driver,
-    prout
 }
 
 impl Registration {
