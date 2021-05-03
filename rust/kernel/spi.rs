@@ -4,6 +4,8 @@ use crate::bindings;
 use crate::c_types;
 use crate::CStr;
 use crate::error::{Error, KernelResult};
+use alloc::boxed::Box;
+use core::pin::Pin;
 
 pub struct SpiDevice(*mut bindings::spi_device);
 
@@ -19,6 +21,7 @@ impl SpiDevice {
 
 pub struct DriverRegistration {
     this_module: &'static crate::ThisModule,
+    registered: bool,
     name: CStr<'static>,
     probe: Option<SpiMethod>,
     remove: Option<SpiMethod>,
@@ -27,40 +30,52 @@ pub struct DriverRegistration {
 }
 
 impl DriverRegistration {
-    pub fn new(this_module: &'static crate::ThisModule, name: CStr<'static>) -> Self {
-        DriverRegistration {
-            this_module,
-            name,
-            probe: None,
-            remove: None,
-            shutdown: None,
-            spi_driver: None,
-        }
+    fn new(this_module: &'static crate::ThisModule, name: CStr<'static>) -> Self {
+         DriverRegistration {
+             this_module,
+             name,
+             registered: false,
+             probe: None,
+             remove: None,
+             shutdown: None,
+             spi_driver: None,
+         }
     }
 
-    pub fn with_probe(mut self, func: SpiMethod) -> Self {
+    // FIXME: Add documentation
+    pub fn new_pinned(this_module: &'static crate::ThisModule, name: CStr<'static>) -> KernelResult<Pin<Box<Self>>> {
+        Ok(Pin::from(Box::try_new(Self::new(this_module, name))?))
+    }
+
+    // FIXME: Add documentation
+    pub fn with_probe(mut self: Pin<Box<Self>>, func: SpiMethod) -> Pin<Box<Self>> {
         self.probe = Some(func);
         self
     } // FIXME: Add remove and shutdown
 
-    pub fn register(&mut self) -> KernelResult {
+    pub fn register(self: Pin<&mut Box<Self>>) -> KernelResult {
         let mut spi_driver = bindings::spi_driver::default();
         spi_driver.driver.name = self.name.as_ptr() as *const c_types::c_char;
         spi_driver.probe = self.probe;
         spi_driver.remove = self.remove;
         spi_driver.shutdown = self.shutdown;
 
-        self.spi_driver = Some(spi_driver);
+        let this = unsafe { self.get_unchecked_mut() };
+        if this.registered {
+            return Err(Error::EINVAL);
+        }
+
+        this.spi_driver = Some(spi_driver);
 
         let res = unsafe {
             bindings::__spi_register_driver(
-                self.this_module.0,
+                this.this_module.0,
                 &mut spi_driver,
             )
         };
 
         match res {
-            0 => Ok(()),
+            0 => { this.registered = true; Ok(()) },
             _ => Err(Error::from_kernel_errno(res)),
         }
     }
@@ -71,6 +86,16 @@ impl Drop for DriverRegistration {
         unsafe { bindings::driver_unregister(&mut self.spi_driver.unwrap().driver) } // FIXME: No unwrap? But it's safe?
     }
 }
+
+// FIXME: Fix SAFETY documentation
+
+// SAFETY: The only method is `register()`, which requires a (pinned) mutable `Registration`, so it
+// is safe to pass `&Registration` to multiple threads because it offers no interior mutability.
+unsafe impl Sync for DriverRegistration {}
+
+// SAFETY: The only method is `register()`, which requires a (pinned) mutable `Registration`, so it
+// is safe to pass `&Registration` to multiple threads because it offers no interior mutability.
+unsafe impl Send for DriverRegistration {}
 
 type SpiMethod = unsafe extern "C" fn(*mut bindings::spi_device) -> c_types::c_int;
 type SpiMethodVoid = unsafe extern "C" fn(*mut bindings::spi_device) -> ();
