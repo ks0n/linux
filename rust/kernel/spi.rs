@@ -5,6 +5,7 @@ use crate::c_types;
 use crate::CStr;
 use crate::error::{Error, KernelResult};
 
+#[derive(Clone, Copy)]
 pub struct SpiDevice(*mut bindings::spi_device);
 
 impl SpiDevice {
@@ -77,11 +78,11 @@ type SpiMethodVoid = unsafe extern "C" fn(*mut bindings::spi_device) -> ();
 
 #[macro_export]
 macro_rules! spi_method {
-    (fn $method_name:ident ($device_name:ident : SpiDevice) -> KernelResult $block:block) => {
+    (fn $method_name:ident (mut $device_name:ident : SpiDevice) -> KernelResult $block:block) => {
         unsafe extern "C" fn $method_name(dev: *mut kernel::bindings::spi_device) -> kernel::c_types::c_int {
             use kernel::spi::SpiDevice;
 
-            fn inner($device_name: SpiDevice) -> KernelResult $block
+            fn inner(mut $device_name: SpiDevice) -> KernelResult $block
 
             match inner(SpiDevice::from_ptr(dev)) {
                 Ok(_) => 0,
@@ -89,11 +90,11 @@ macro_rules! spi_method {
             }
         }
     };
-    (fn $method_name:ident ($device_name:ident : SpiDevice) $block:block) => {
+    (fn $method_name:ident (mut $device_name:ident : SpiDevice) $block:block) => {
         unsafe extern "C" fn $method_name(dev: *mut kernel::bindings::spi_device) {
             use kernel::spi::SpiDevice;
 
-            fn inner($device_name: SpiDevice) $block
+            fn inner(mut $device_name: SpiDevice) $block
 
             inner(SpiDevice::from_ptr(dev))
         }
