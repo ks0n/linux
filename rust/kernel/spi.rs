@@ -57,15 +57,20 @@ impl DriverRegistration {
         remove: Option<SpiMethod>,
         shutdown: Option<SpiMethodVoid>,
     ) -> KernelResult<Pin<Box<Self>>> {
-        Ok(Pin::from(Box::try_new(Self::new(
+        let mut registration = Pin::from(Box::try_new(Self::new(
             this_module,
             name,
             probe,
             remove,
             shutdown,
-        ))?))
+        ))?);
+
+        registration.as_mut().register()?;
+
+        Ok(registration)
     }
 
+    // FIXME: Add documentation
     pub fn register(self: Pin<&mut Self>) -> KernelResult {
         let mut spi_driver = bindings::spi_driver::default();
         spi_driver.driver.name = self.name.as_ptr() as *const c_types::c_char;
