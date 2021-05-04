@@ -2,8 +2,8 @@
 
 use crate::bindings;
 use crate::c_types;
-use crate::CStr;
 use crate::error::{Error, KernelResult};
+use crate::CStr;
 use alloc::boxed::Box;
 use core::pin::Pin;
 
@@ -30,28 +30,40 @@ pub struct DriverRegistration {
 }
 
 impl DriverRegistration {
-    fn new(this_module: &'static crate::ThisModule, name: CStr<'static>) -> Self {
-         DriverRegistration {
-             this_module,
-             name,
-             registered: false,
-             probe: None,
-             remove: None,
-             shutdown: None,
-             spi_driver: None,
-         }
+    fn new(
+        this_module: &'static crate::ThisModule,
+        name: CStr<'static>,
+        probe: Option<SpiMethod>,
+        remove: Option<SpiMethod>,
+        shutdown: Option<SpiMethodVoid>,
+    ) -> Self {
+        DriverRegistration {
+            this_module,
+            name,
+            registered: false,
+            probe,
+            remove,
+            shutdown,
+            spi_driver: None,
+        }
     }
 
     // FIXME: Add documentation
-    pub fn new_pinned(this_module: &'static crate::ThisModule, name: CStr<'static>) -> KernelResult<Pin<Box<Self>>> {
-        Ok(Pin::from(Box::try_new(Self::new(this_module, name))?))
+    pub fn new_pinned(
+        this_module: &'static crate::ThisModule,
+        name: CStr<'static>,
+        probe: Option<SpiMethod>,
+        remove: Option<SpiMethod>,
+        shutdown: Option<SpiMethodVoid>,
+    ) -> KernelResult<Pin<Box<Self>>> {
+        Ok(Pin::from(Box::try_new(Self::new(
+            this_module,
+            name,
+            probe,
+            remove,
+            shutdown,
+        ))?))
     }
-
-    // FIXME: Add documentation
-    pub fn with_probe(mut self: Pin<Box<Self>>, func: SpiMethod) -> Pin<Box<Self>> {
-        self.probe = Some(func);
-        self
-    } // FIXME: Add remove and shutdown
 
     pub fn register(self: Pin<&mut Self>) -> KernelResult {
         let mut spi_driver = bindings::spi_driver::default();
@@ -67,15 +79,13 @@ impl DriverRegistration {
 
         this.spi_driver = Some(spi_driver);
 
-        let res = unsafe {
-            bindings::__spi_register_driver(
-                this.this_module.0,
-                &mut spi_driver,
-            )
-        };
+        let res = unsafe { bindings::__spi_register_driver(this.this_module.0, &mut spi_driver) };
 
         match res {
-            0 => { this.registered = true; Ok(()) },
+            0 => {
+                this.registered = true;
+                Ok(())
+            }
             _ => Err(Error::from_kernel_errno(res)),
         }
     }
@@ -83,7 +93,8 @@ impl DriverRegistration {
 
 impl Drop for DriverRegistration {
     fn drop(&mut self) {
-        unsafe { bindings::driver_unregister(&mut self.spi_driver.unwrap().driver) } // FIXME: No unwrap? But it's safe?
+        unsafe { bindings::driver_unregister(&mut self.spi_driver.unwrap().driver) }
+        // FIXME: No unwrap? But it's safe?
     }
 }
 
@@ -128,29 +139,36 @@ macro_rules! spi_method {
 pub struct Spi;
 
 impl Spi {
-    pub fn write_then_read(dev: &mut SpiDevice, tx_buf: &[u8], n_tx: usize, rx_buf: &mut [u8], n_rx: usize) -> KernelResult {
+    pub fn write_then_read(
+        dev: &mut SpiDevice,
+        tx_buf: &[u8],
+        n_tx: usize,
+        rx_buf: &mut [u8],
+        n_rx: usize,
+    ) -> KernelResult {
         let res = unsafe {
-            bindings::spi_write_then_read(dev.to_ptr(),
-            tx_buf.as_ptr() as *const c_types::c_void,
-            n_tx as c_types::c_uint,
-            rx_buf.as_ptr() as *mut c_types::c_void,
-            n_rx as c_types::c_uint,
+            bindings::spi_write_then_read(
+                dev.to_ptr(),
+                tx_buf.as_ptr() as *const c_types::c_void,
+                n_tx as c_types::c_uint,
+                rx_buf.as_ptr() as *mut c_types::c_void,
+                n_rx as c_types::c_uint,
             )
         };
 
         match res {
-            0 => Ok(()), // 0 indicates a valid transfer,
+            0 => Ok(()),                               // 0 indicates a valid transfer,
             err => Err(Error::from_kernel_errno(err)), // A negative number indicates an error
         }
     }
 
     #[inline]
     pub fn write(dev: &mut SpiDevice, tx_buf: &[u8], n_tx: usize) -> KernelResult {
-        Spi::write_then_read(dev, tx_buf, n_tx, &mut [0u8;0], 0)
+        Spi::write_then_read(dev, tx_buf, n_tx, &mut [0u8; 0], 0)
     }
 
     #[inline]
     pub fn read(dev: &mut SpiDevice, rx_buf: &mut [u8], n_rx: usize) -> KernelResult {
-        Spi::write_then_read(dev, &[0u8;0], 0, rx_buf, n_rx)
+        Spi::write_then_read(dev, &[0u8; 0], 0, rx_buf, n_rx)
     }
 }
