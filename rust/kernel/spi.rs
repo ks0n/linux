@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0
 
+//! SPI Abstraction API.
+//!
+//! This module allows the user to register their own SPI Driver, with associated probe,
+//! remove and shutdown methods. It also provides a way to call the main SPI Transfer
+//! function, spi_write_then_read()
+
 use crate::bindings;
 use crate::c_types;
 use crate::error::{Error, KernelResult};
@@ -7,19 +13,23 @@ use crate::CStr;
 use alloc::boxed::Box;
 use core::pin::Pin;
 
+/// Abstraction around an SPI device
 #[derive(Clone, Copy)]
 pub struct SpiDevice(*mut bindings::spi_device);
 
 impl SpiDevice {
+    /// Instanciate an SPI Device from a given, valid spi_device
     pub fn from_ptr(dev: *mut bindings::spi_device) -> Self {
         SpiDevice(dev)
     }
 
+    /// Get the underlying pointer from the SPI Device
     pub fn to_ptr(&mut self) -> *mut bindings::spi_device {
         self.0
     }
 }
 
+/// A registration of an SPI driver
 pub struct DriverRegistration {
     this_module: &'static crate::ThisModule,
     registered: bool,
@@ -49,7 +59,7 @@ impl DriverRegistration {
         }
     }
 
-    // FIXME: Add documentation
+    /// Create a new pinned SPI Driver and register it
     pub fn new_pinned(
         this_module: &'static crate::ThisModule,
         name: CStr<'static>,
@@ -70,7 +80,7 @@ impl DriverRegistration {
         Ok(registration)
     }
 
-    // FIXME: Add documentation
+    /// Register a pinned SPI Driver
     pub fn register(self: Pin<&mut Self>) -> KernelResult {
         let mut spi_driver = bindings::spi_driver::default();
         spi_driver.driver.name = self.name.as_ptr() as *const c_types::c_char;
@@ -117,6 +127,19 @@ unsafe impl Send for DriverRegistration {}
 type SpiMethod = unsafe extern "C" fn(*mut bindings::spi_device) -> c_types::c_int;
 type SpiMethodVoid = unsafe extern "C" fn(*mut bindings::spi_device) -> ();
 
+/// Helper macro around the declaration of "SPI methods". There are two types of SPI Methods:
+/// The one used by probe() and remove(), which takes an SpiDevice as paramter and return
+/// a KernelResult, and the one used by shutdown() which takes an SpiDevice as parameter but
+/// does not return anything.
+/// The way to declare methods is the following:
+/// - Write a function the way you would in Rust
+/// - Be careful: The function's signature must be one of the following:
+///     - `fn <name>(mut <device_name>: SpiDevice) -> KernelResult` for probe and remove
+///     - `fn <name>(mut <device_name>: SpiDevice)` for shutdown
+/// - Surround each function declaration with the spi_method! macro to generate correct
+/// functions, callable by the kernel.
+/// - Remember to pass your functions as parameters when instantiating a new
+/// spi::DriverRegistration
 #[macro_export]
 macro_rules! spi_method {
     (fn $method_name:ident (mut $device_name:ident : SpiDevice) -> KernelResult $block:block) => {
@@ -142,9 +165,12 @@ macro_rules! spi_method {
     };
 }
 
+/// Abstraction struct around basic SPI functions: write_then_read, write, read...
 pub struct Spi;
 
 impl Spi {
+    /// Transfer data on a given SPI device. This corresponds to the kernel's
+    /// `spi_write_then_read`
     pub fn write_then_read(
         dev: &mut SpiDevice,
         tx_buf: &[u8],
@@ -168,11 +194,13 @@ impl Spi {
         }
     }
 
+    /// Write data to a given SPI device. This corresponds to the kernel's `spi_write`
     #[inline]
     pub fn write(dev: &mut SpiDevice, tx_buf: &[u8], n_tx: usize) -> KernelResult {
         Spi::write_then_read(dev, tx_buf, n_tx, &mut [0u8; 0], 0)
     }
 
+    /// Read data from a given SPI device. This corresponds to the kernel's `spi_read`
     #[inline]
     pub fn read(dev: &mut SpiDevice, rx_buf: &mut [u8], n_rx: usize) -> KernelResult {
         Spi::write_then_read(dev, &[0u8; 0], 0, rx_buf, n_rx)
