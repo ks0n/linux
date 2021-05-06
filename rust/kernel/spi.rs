@@ -4,7 +4,8 @@
 //!
 //! This module allows the user to register their own SPI Driver, with associated probe,
 //! remove and shutdown methods. It also provides a way to call the main SPI Transfer
-//! function, spi_write_then_read()
+//! function, spi_write_then_read(), as well as the associated quality-of-life macros,
+//! spi_write() and spi_read()
 
 use crate::bindings;
 use crate::c_types;
@@ -18,7 +19,7 @@ use core::pin::Pin;
 pub struct SpiDevice(*mut bindings::spi_device);
 
 impl SpiDevice {
-    /// Instanciate an SPI Device from a given, valid spi_device
+    /// Instanciate an SPI Device from a given, non-null and *valid* spi_device
     pub fn from_ptr(dev: *mut bindings::spi_device) -> Self {
         SpiDevice(dev)
     }
