@@ -9,18 +9,19 @@
 #![feature(allocator_api, global_asm)]
 
 use kernel::{
-    file_operations::{File, FileOperations},
+    file::File,
+    file_operations::FileOperations,
+    io_buffer::{IoBufferReader, IoBufferWriter},
     prelude::*,
-    user_ptr::{UserSlicePtrReader, UserSlicePtrWriter},
 };
 
 #[derive(Default)]
 struct RandomFile;
 
 impl FileOperations for RandomFile {
-    kernel::declare_file_operations!(read, write);
+    kernel::declare_file_operations!(read, write, read_iter, write_iter);
 
-    fn read(&self, file: &File, buf: &mut UserSlicePtrWriter, _offset: u64) -> KernelResult<usize> {
+    fn read<T: IoBufferWriter>(&self, file: &File, buf: &mut T, _offset: u64) -> Result<usize> {
         let total_len = buf.len();
         let mut chunkbuf = [0; 256];
 
@@ -38,7 +39,7 @@ impl FileOperations for RandomFile {
         Ok(total_len)
     }
 
-    fn write(&self, buf: &mut UserSlicePtrReader, _offset: u64) -> KernelResult<usize> {
+    fn write<T: IoBufferReader>(&self, _file: &File, buf: &mut T, _offset: u64) -> Result<usize> {
         let total_len = buf.len();
         let mut chunkbuf = [0; 256];
         while !buf.is_empty() {

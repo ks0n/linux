@@ -13,14 +13,12 @@ module! {
     author: b"Rust for Linux Contributors",
     description: b"Rust printing macros sample",
     license: b"GPL v2",
-    params: {
-    },
 }
 
 struct RustPrint;
 
 impl KernelModule for RustPrint {
-    fn init() -> KernelResult<Self> {
+    fn init() -> Result<Self> {
         pr_info!("Rust printing macros sample (init)\n");
 
         pr_emerg!("Emergency message (level 0) without args\n");

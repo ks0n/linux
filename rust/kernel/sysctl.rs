@@ -12,19 +12,20 @@ use core::mem;
 use core::ptr;
 use core::sync::atomic;
 
-use crate::bindings;
-use crate::c_types;
-use crate::error;
-use crate::types;
-use crate::user_ptr::{UserSlicePtr, UserSlicePtrWriter};
+use crate::{
+    bindings, c_types, error,
+    io_buffer::IoBufferWriter,
+    types,
+    user_ptr::{UserSlicePtr, UserSlicePtrWriter},
+};
 
 /// Sysctl storage.
 pub trait SysctlStorage: Sync {
     /// Writes a byte slice.
-    fn store_value(&self, data: &[u8]) -> (usize, error::KernelResult);
+    fn store_value(&self, data: &[u8]) -> (usize, error::Result);
 
     /// Reads via a [`UserSlicePtrWriter`].
-    fn read_value(&self, data: &mut UserSlicePtrWriter) -> (usize, error::KernelResult);
+    fn read_value(&self, data: &mut UserSlicePtrWriter) -> (usize, error::Result);
 }
 
 fn trim_whitespace(mut data: &[u8]) -> &[u8] {
@@ -45,17 +46,17 @@ impl<T> SysctlStorage for &T
 where
     T: SysctlStorage,
 {
-    fn store_value(&self, data: &[u8]) -> (usize, error::KernelResult) {
+    fn store_value(&self, data: &[u8]) -> (usize, error::Result) {
         (*self).store_value(data)
     }
 
-    fn read_value(&self, data: &mut UserSlicePtrWriter) -> (usize, error::KernelResult) {
+    fn read_value(&self, data: &mut UserSlicePtrWriter) -> (usize, error::Result) {
         (*self).read_value(data)
     }
 }
 
 impl SysctlStorage for atomic::AtomicBool {
-    fn store_value(&self, data: &[u8]) -> (usize, error::KernelResult) {
+    fn store_value(&self, data: &[u8]) -> (usize, error::Result) {
         let result = match trim_whitespace(data) {
             b"0" => {
                 self.store(false, atomic::Ordering::Relaxed);
@@ -70,7 +71,7 @@ impl SysctlStorage for atomic::AtomicBool {
         (data.len(), result)
     }
 
-    fn read_value(&self, data: &mut UserSlicePtrWriter) -> (usize, error::KernelResult) {
+    fn read_value(&self, data: &mut UserSlicePtrWriter) -> (usize, error::Result) {
         let value = if self.load(atomic::Ordering::Relaxed) {
             b"1\n"
         } else {
@@ -133,7 +134,7 @@ impl<T: SysctlStorage> Sysctl<T> {
         name: types::CStr<'static>,
         storage: T,
         mode: types::Mode,
-    ) -> error::KernelResult<Sysctl<T>> {
+    ) -> error::Result<Sysctl<T>> {
         if name.contains('/') {
             return Err(error::Error::EINVAL);
         }

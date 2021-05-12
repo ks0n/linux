@@ -2,7 +2,10 @@
 
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, Ordering};
-use kernel::{bindings, linked_list::Links, prelude::*, sync::Ref, user_ptr::UserSlicePtrWriter};
+use kernel::{
+    bindings, io_buffer::IoBufferWriter, linked_list::Links, prelude::*, sync::Ref,
+    user_ptr::UserSlicePtrWriter,
+};
 
 use crate::{
     defs::*,
@@ -134,11 +137,7 @@ impl Transaction {
 }
 
 impl DeliverToRead for Transaction {
-    fn do_work(
-        self: Arc<Self>,
-        thread: &Thread,
-        writer: &mut UserSlicePtrWriter,
-    ) -> KernelResult<bool> {
+    fn do_work(self: Arc<Self>, thread: &Thread, writer: &mut UserSlicePtrWriter) -> Result<bool> {
         /* TODO: Initialise the following fields from tr:
             pub sender_pid: pid_t,
             pub sender_euid: uid_t,

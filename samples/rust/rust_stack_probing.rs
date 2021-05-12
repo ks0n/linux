@@ -14,14 +14,12 @@ module! {
     author: b"Rust for Linux Contributors",
     description: b"Rust stack probing sample",
     license: b"GPL v2",
-    params: {
-    },
 }
 
 struct RustStackProbing;
 
 impl KernelModule for RustStackProbing {
-    fn init() -> KernelResult<Self> {
+    fn init() -> Result<Self> {
         pr_info!("Rust stack probing sample (init)\n");
 
         // Including this large variable on the stack will trigger

@@ -6,6 +6,7 @@
 #include <linux/sched/signal.h>
 #include <linux/gfp.h>
 #include <linux/highmem.h>
+#include <linux/uio.h>
 
 void rust_helper_BUG(void)
 {
@@ -20,6 +21,11 @@ unsigned long rust_helper_copy_from_user(void *to, const void __user *from, unsi
 unsigned long rust_helper_copy_to_user(void __user *to, const void *from, unsigned long n)
 {
 	return copy_to_user(to, from, n);
+}
+
+unsigned long rust_helper_clear_user(void __user *to, unsigned long n)
+{
+	return clear_user(to, n);
 }
 
 void rust_helper_spin_lock_init(spinlock_t *lock, const char *name,
@@ -86,6 +92,18 @@ int rust_helper_cond_resched(void)
 	return cond_resched();
 }
 EXPORT_SYMBOL_GPL(rust_helper_cond_resched);
+
+size_t rust_helper_copy_from_iter(void *addr, size_t bytes, struct iov_iter *i)
+{
+	return copy_from_iter(addr, bytes, i);
+}
+EXPORT_SYMBOL_GPL(rust_helper_copy_from_iter);
+
+size_t rust_helper_copy_to_iter(const void *addr, size_t bytes, struct iov_iter *i)
+{
+	return copy_to_iter(addr, bytes, i);
+}
+EXPORT_SYMBOL_GPL(rust_helper_copy_to_iter);
 
 #if !defined(CONFIG_ARM)
 // See https://github.com/rust-lang/rust-bindgen/issues/1671

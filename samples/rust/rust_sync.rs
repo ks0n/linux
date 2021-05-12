@@ -19,14 +19,12 @@ module! {
     author: b"Rust for Linux Contributors",
     description: b"Rust synchronisation primitives sample",
     license: b"GPL v2",
-    params: {
-    },
 }
 
 struct RustSync;
 
 impl KernelModule for RustSync {
-    fn init() -> KernelResult<Self> {
+    fn init() -> Result<Self> {
         pr_info!("Rust synchronisation primitives sample (init)\n");
 
         // Test mutexes.

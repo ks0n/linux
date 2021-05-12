@@ -6,6 +6,7 @@ use core::{
     sync::atomic::{AtomicU64, Ordering},
 };
 use kernel::{
+    io_buffer::IoBufferWriter,
     linked_list::{GetLinks, Links, List},
     prelude::*,
     sync::{Guard, LockedBy, Mutex, Ref, SpinLock},
@@ -169,11 +170,7 @@ impl GetLinks for NodeDeath {
 }
 
 impl DeliverToRead for NodeDeath {
-    fn do_work(
-        self: Arc<Self>,
-        _thread: &Thread,
-        writer: &mut UserSlicePtrWriter,
-    ) -> KernelResult<bool> {
+    fn do_work(self: Arc<Self>, _thread: &Thread, writer: &mut UserSlicePtrWriter) -> Result<bool> {
         let done = {
             let inner = self.inner.lock();
             if inner.aborted {
@@ -334,7 +331,7 @@ impl Node {
         inner.weak.has_count = true;
     }
 
-    fn write(&self, writer: &mut UserSlicePtrWriter, code: u32) -> KernelResult {
+    fn write(&self, writer: &mut UserSlicePtrWriter, code: u32) -> Result {
         writer.write(&code)?;
         writer.write(&self.ptr)?;
         writer.write(&self.cookie)?;
@@ -343,11 +340,7 @@ impl Node {
 }
 
 impl DeliverToRead for Node {
-    fn do_work(
-        self: Arc<Self>,
-        _thread: &Thread,
-        writer: &mut UserSlicePtrWriter,
-    ) -> KernelResult<bool> {
+    fn do_work(self: Arc<Self>, _thread: &Thread, writer: &mut UserSlicePtrWriter) -> Result<bool> {
         let mut owner_inner = self.owner.inner.lock();
         let inner = self.inner.access_mut(&mut owner_inner);
         let strong = inner.strong.count > 0;

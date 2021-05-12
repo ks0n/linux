@@ -9,7 +9,8 @@
 
 use crate::bindings;
 use crate::c_types;
-use crate::error::{Error, KernelResult};
+use crate::error::{Error};
+use crate::Result as KernelResult; // FIXME: Rework file based on new API
 use crate::CStr;
 use alloc::boxed::Box;
 use core::pin::Pin;
@@ -143,6 +144,7 @@ type SpiMethodVoid = unsafe extern "C" fn(*mut bindings::spi_device) -> ();
 /// spi::DriverRegistration
 #[macro_export]
 macro_rules! spi_method {
+    // FIXME: Add recipe with compile_error!() to indicate syntax errors to the user
     (fn $method_name:ident (mut $device_name:ident : SpiDevice) -> KernelResult $block:block) => {
         unsafe extern "C" fn $method_name(dev: *mut kernel::bindings::spi_device) -> kernel::c_types::c_int {
             use kernel::spi::SpiDevice;

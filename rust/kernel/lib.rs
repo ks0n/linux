@@ -40,6 +40,7 @@ pub mod buffer;
 pub mod c_types;
 pub mod chrdev;
 mod error;
+pub mod file;
 pub mod file_operations;
 pub mod miscdev;
 pub mod pages;
@@ -59,10 +60,12 @@ pub mod sync;
 #[cfg(CONFIG_SYSCTL)]
 pub mod sysctl;
 
+pub mod io_buffer;
+pub mod iov_iter;
 mod types;
 pub mod user_ptr;
 
-pub use crate::error::{Error, KernelResult};
+pub use crate::error::{Error, Result};
 pub use crate::types::{CStr, Mode};
 
 #[cfg(CONFIG_SPI)]
@@ -86,7 +89,7 @@ pub trait KernelModule: Sized + Sync {
     /// should do.
     ///
     /// Equivalent to the `module_init` macro in the C API.
-    fn init() -> KernelResult<Self>;
+    fn init() -> Result<Self>;
 }
 
 /// Equivalent to `THIS_MODULE` in the C API.
