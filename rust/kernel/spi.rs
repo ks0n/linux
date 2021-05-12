@@ -2,7 +2,7 @@
 
 use crate::bindings;
 use crate::c_types;
-use crate::error::{Error, KernelResult};
+use crate::error::{Error, Result};
 use crate::CStr;
 use alloc::boxed::Box;
 use core::pin::Pin;
@@ -56,7 +56,7 @@ impl DriverRegistration {
         probe: Option<SpiMethod>,
         remove: Option<SpiMethod>,
         shutdown: Option<SpiMethodVoid>,
-    ) -> KernelResult<Pin<Box<Self>>> {
+    ) -> Result<Pin<Box<Self>>> {
         let mut registration = Pin::from(Box::try_new(Self::new(
             this_module,
             name,
@@ -71,7 +71,7 @@ impl DriverRegistration {
     }
 
     // FIXME: Add documentation
-    pub fn register(self: Pin<&mut Self>) -> KernelResult {
+    pub fn register(self: Pin<&mut Self>) -> Result {
         let mut spi_driver = bindings::spi_driver::default();
         spi_driver.driver.name = self.name.as_ptr() as *const c_types::c_char;
         spi_driver.probe = self.probe;
@@ -119,11 +119,11 @@ type SpiMethodVoid = unsafe extern "C" fn(*mut bindings::spi_device) -> ();
 
 #[macro_export]
 macro_rules! spi_method {
-    (fn $method_name:ident (mut $device_name:ident : SpiDevice) -> KernelResult $block:block) => {
+    (fn $method_name:ident (mut $device_name:ident : SpiDevice) -> Result $block:block) => {
         unsafe extern "C" fn $method_name(dev: *mut kernel::bindings::spi_device) -> kernel::c_types::c_int {
             use kernel::spi::SpiDevice;
 
-            fn inner(mut $device_name: SpiDevice) -> KernelResult $block
+            fn inner(mut $device_name: SpiDevice) -> Result $block
 
             match inner(SpiDevice::from_ptr(dev)) {
                 Ok(_) => 0,
@@ -151,7 +151,7 @@ impl Spi {
         n_tx: usize,
         rx_buf: &mut [u8],
         n_rx: usize,
-    ) -> KernelResult {
+    ) -> Result {
         let res = unsafe {
             bindings::spi_write_then_read(
                 dev.to_ptr(),
@@ -169,12 +169,12 @@ impl Spi {
     }
 
     #[inline]
-    pub fn write(dev: &mut SpiDevice, tx_buf: &[u8], n_tx: usize) -> KernelResult {
+    pub fn write(dev: &mut SpiDevice, tx_buf: &[u8], n_tx: usize) -> Result {
         Spi::write_then_read(dev, tx_buf, n_tx, &mut [0u8; 0], 0)
     }
 
     #[inline]
-    pub fn read(dev: &mut SpiDevice, rx_buf: &mut [u8], n_rx: usize) -> KernelResult {
+    pub fn read(dev: &mut SpiDevice, rx_buf: &mut [u8], n_rx: usize) -> Result {
         Spi::write_then_read(dev, &[0u8; 0], 0, rx_buf, n_rx)
     }
 }
