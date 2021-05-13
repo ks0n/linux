@@ -148,17 +148,15 @@ impl Spi {
     pub fn write_then_read(
         dev: &mut SpiDevice,
         tx_buf: &[u8],
-        n_tx: usize,
         rx_buf: &mut [u8],
-        n_rx: usize,
     ) -> Result {
         let res = unsafe {
             bindings::spi_write_then_read(
                 dev.to_ptr(),
                 tx_buf.as_ptr() as *const c_types::c_void,
-                n_tx as c_types::c_uint,
-                rx_buf.as_ptr() as *mut c_types::c_void,
-                n_rx as c_types::c_uint,
+                tx_buf.len() as c_types::c_uint,
+                rx_buf.as_mut_ptr() as *mut c_types::c_void,
+                rx_buf.len() as c_types::c_uint,
             )
         };
 
@@ -169,12 +167,12 @@ impl Spi {
     }
 
     #[inline]
-    pub fn write(dev: &mut SpiDevice, tx_buf: &[u8], n_tx: usize) -> Result {
-        Spi::write_then_read(dev, tx_buf, n_tx, &mut [0u8; 0], 0)
+    pub fn write(dev: &mut SpiDevice, tx_buf: &[u8]) -> Result {
+        Spi::write_then_read(dev, tx_buf, &mut [0u8; 0])
     }
 
     #[inline]
-    pub fn read(dev: &mut SpiDevice, rx_buf: &mut [u8], n_rx: usize) -> Result {
-        Spi::write_then_read(dev, &[0u8; 0], 0, rx_buf, n_rx)
+    pub fn read(dev: &mut SpiDevice, rx_buf: &mut [u8]) -> Result {
+        Spi::write_then_read(dev, &[0u8; 0], rx_buf)
     }
 }
