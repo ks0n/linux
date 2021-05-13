@@ -11,7 +11,7 @@ use core::pin::Pin;
 pub struct SpiDevice(*mut bindings::spi_device);
 
 impl SpiDevice {
-    pub fn from_ptr(dev: *mut bindings::spi_device) -> Self {
+    pub unsafe fn from_ptr(dev: *mut bindings::spi_device) -> Self {
         SpiDevice(dev)
     }
 
@@ -125,7 +125,8 @@ macro_rules! spi_method {
 
             fn inner(mut $device_name: SpiDevice) -> Result $block
 
-            match inner(SpiDevice::from_ptr(dev)) {
+            // SAFETY: The dev pointer is provided by the kernel and is sure to be valid
+            match inner(unsafe { SpiDevice::from_ptr(dev) }) {
                 Ok(_) => 0,
                 Err(e) => e.to_kernel_errno(),
             }
@@ -137,7 +138,8 @@ macro_rules! spi_method {
 
             fn inner(mut $device_name: SpiDevice) $block
 
-            inner(SpiDevice::from_ptr(dev))
+            // SAFETY: The dev pointer is provided by the kernel and is sure to be valid
+            inner(unsafe { SpiDevice::from_ptr(dev) })
         }
     };
 }
@@ -145,11 +147,7 @@ macro_rules! spi_method {
 pub struct Spi;
 
 impl Spi {
-    pub fn write_then_read(
-        dev: &mut SpiDevice,
-        tx_buf: &[u8],
-        rx_buf: &mut [u8],
-    ) -> Result {
+    pub fn write_then_read(dev: &mut SpiDevice, tx_buf: &[u8], rx_buf: &mut [u8]) -> Result {
         let res = unsafe {
             bindings::spi_write_then_read(
                 dev.to_ptr(),
