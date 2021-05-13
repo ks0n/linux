@@ -11,7 +11,7 @@ use core::pin::Pin;
 pub struct SpiDevice(*mut bindings::spi_device);
 
 impl SpiDevice {
-    pub fn from_ptr(dev: *mut bindings::spi_device) -> Self {
+    pub unsafe fn from_ptr(dev: *mut bindings::spi_device) -> Self {
         SpiDevice(dev)
     }
 
@@ -85,7 +85,9 @@ impl DriverRegistration {
 
         this.spi_driver = Some(spi_driver);
 
-        let res = unsafe { bindings::__spi_register_driver(this.this_module.0, &mut spi_driver) };
+        let res = unsafe {
+            bindings::__spi_register_driver(this.this_module.0, this.spi_driver.as_mut().unwrap())
+        };
 
         match res {
             0 => {
@@ -99,7 +101,7 @@ impl DriverRegistration {
 
 impl Drop for DriverRegistration {
     fn drop(&mut self) {
-        unsafe { bindings::driver_unregister(&mut self.spi_driver.unwrap().driver) }
+        unsafe { bindings::driver_unregister(&mut self.spi_driver.as_mut().unwrap().driver) }
         // FIXME: No unwrap? But it's safe?
     }
 }
@@ -110,8 +112,7 @@ impl Drop for DriverRegistration {
 // is safe to pass `&Registration` to multiple threads because it offers no interior mutability.
 unsafe impl Sync for DriverRegistration {}
 
-// SAFETY: The only method is `register()`, which requires a (pinned) mutable `Registration`, so it
-// is safe to pass `&Registration` to multiple threads because it offers no interior mutability.
+// SAFETY: All functions work from any thread.
 unsafe impl Send for DriverRegistration {}
 
 type SpiMethod = unsafe extern "C" fn(*mut bindings::spi_device) -> c_types::c_int;
@@ -125,7 +126,8 @@ macro_rules! spi_method {
 
             fn inner(mut $device_name: SpiDevice) -> Result $block
 
-            match inner(SpiDevice::from_ptr(dev)) {
+            // SAFETY: The dev pointer is provided by the kernel and is sure to be valid
+            match inner(unsafe { SpiDevice::from_ptr(dev) }) {
                 Ok(_) => 0,
                 Err(e) => e.to_kernel_errno(),
             }
@@ -137,7 +139,8 @@ macro_rules! spi_method {
 
             fn inner(mut $device_name: SpiDevice) $block
 
-            inner(SpiDevice::from_ptr(dev))
+            // SAFETY: The dev pointer is provided by the kernel and is sure to be valid
+            inner(unsafe { SpiDevice::from_ptr(dev) })
         }
     };
 }
@@ -145,20 +148,14 @@ macro_rules! spi_method {
 pub struct Spi;
 
 impl Spi {
-    pub fn write_then_read(
-        dev: &mut SpiDevice,
-        tx_buf: &[u8],
-        n_tx: usize,
-        rx_buf: &mut [u8],
-        n_rx: usize,
-    ) -> Result {
+    pub fn write_then_read(dev: &mut SpiDevice, tx_buf: &[u8], rx_buf: &mut [u8]) -> Result {
         let res = unsafe {
             bindings::spi_write_then_read(
                 dev.to_ptr(),
                 tx_buf.as_ptr() as *const c_types::c_void,
-                n_tx as c_types::c_uint,
-                rx_buf.as_ptr() as *mut c_types::c_void,
-                n_rx as c_types::c_uint,
+                tx_buf.len() as c_types::c_uint,
+                rx_buf.as_mut_ptr() as *mut c_types::c_void,
+                rx_buf.len() as c_types::c_uint,
             )
         };
 
@@ -169,12 +166,12 @@ impl Spi {
     }
 
     #[inline]
-    pub fn write(dev: &mut SpiDevice, tx_buf: &[u8], n_tx: usize) -> Result {
-        Spi::write_then_read(dev, tx_buf, n_tx, &mut [0u8; 0], 0)
+    pub fn write(dev: &mut SpiDevice, tx_buf: &[u8]) -> Result {
+        Spi::write_then_read(dev, tx_buf, &mut [0u8; 0])
     }
 
     #[inline]
-    pub fn read(dev: &mut SpiDevice, rx_buf: &mut [u8], n_rx: usize) -> Result {
-        Spi::write_then_read(dev, &[0u8; 0], 0, rx_buf, n_rx)
+    pub fn read(dev: &mut SpiDevice, rx_buf: &mut [u8]) -> Result {
+        Spi::write_then_read(dev, &[0u8; 0], rx_buf)
     }
 }
