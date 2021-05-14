@@ -78,14 +78,14 @@ impl DriverRegistration {
         spi_driver.remove = self.remove;
         spi_driver.shutdown = self.shutdown;
 
-        let this = unsafe { self.get_unchecked_mut() };
+        let mut this = unsafe { self.get_unchecked_mut() };
         if this.registered {
             return Err(Error::EINVAL);
         }
 
         this.spi_driver = Some(spi_driver);
 
-        let res = unsafe { bindings::__spi_register_driver(this.this_module.0, &mut spi_driver) };
+        let res = unsafe { bindings::__spi_register_driver(this.this_module.0, this.spi_driver.as_mut().unwrap()) };
 
         match res {
             0 => {
@@ -99,7 +99,7 @@ impl DriverRegistration {
 
 impl Drop for DriverRegistration {
     fn drop(&mut self) {
-        unsafe { bindings::driver_unregister(&mut self.spi_driver.unwrap().driver) }
+        unsafe { bindings::driver_unregister(&mut self.spi_driver.as_mut().unwrap().driver) }
         // FIXME: No unwrap? But it's safe?
     }
 }
