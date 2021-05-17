@@ -110,8 +110,7 @@ impl Drop for DriverRegistration {
 // is safe to pass `&Registration` to multiple threads because it offers no interior mutability.
 unsafe impl Sync for DriverRegistration {}
 
-// SAFETY: The only method is `register()`, which requires a (pinned) mutable `Registration`, so it
-// is safe to pass `&Registration` to multiple threads because it offers no interior mutability.
+// SAFETY: All functions work from any thread.
 unsafe impl Send for DriverRegistration {}
 
 type SpiMethod = unsafe extern "C" fn(*mut bindings::spi_device) -> c_types::c_int;
