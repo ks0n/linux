@@ -78,7 +78,7 @@ impl DriverRegistration {
         spi_driver.remove = self.remove;
         spi_driver.shutdown = self.shutdown;
 
-        let mut this = unsafe { self.get_unchecked_mut() };
+        let this = unsafe { self.get_unchecked_mut() };
         if this.registered {
             return Err(Error::EINVAL);
         }
