@@ -24,59 +24,77 @@ pub struct DriverRegistration {
     this_module: &'static crate::ThisModule,
     registered: bool,
     name: CStr<'static>,
-    probe: Option<SpiMethod>,
-    remove: Option<SpiMethod>,
-    shutdown: Option<SpiMethodVoid>,
     spi_driver: Option<bindings::spi_driver>,
 }
 
+pub trait SpiMethods {
+    // const TO_USE?
+
+    fn probe(_spi_dev: SpiDevice) -> Result {
+        Ok(())
+    }
+
+    fn remove(_spi_dev: SpiDevice) -> Result {
+        Ok(())
+    }
+
+    fn shutdown(_spi_dev: SpiDevice) {}
+}
+
 impl DriverRegistration {
-    fn new(
-        this_module: &'static crate::ThisModule,
-        name: CStr<'static>,
-        probe: Option<SpiMethod>,
-        remove: Option<SpiMethod>,
-        shutdown: Option<SpiMethodVoid>,
-    ) -> Self {
+    fn new(this_module: &'static crate::ThisModule, name: CStr<'static>) -> Self {
         DriverRegistration {
             this_module,
             name,
             registered: false,
-            probe,
-            remove,
-            shutdown,
             spi_driver: None,
         }
     }
 
     // FIXME: Add documentation
-    pub fn new_pinned(
+    pub fn new_pinned<T: SpiMethods>(
         this_module: &'static crate::ThisModule,
         name: CStr<'static>,
-        probe: Option<SpiMethod>,
-        remove: Option<SpiMethod>,
-        shutdown: Option<SpiMethodVoid>,
     ) -> Result<Pin<Box<Self>>> {
-        let mut registration = Pin::from(Box::try_new(Self::new(
-            this_module,
-            name,
-            probe,
-            remove,
-            shutdown,
-        ))?);
+        let mut registration = Pin::from(Box::try_new(Self::new(this_module, name))?);
 
-        registration.as_mut().register()?;
+        registration.as_mut().register::<T>()?;
 
         Ok(registration)
     }
 
+    unsafe extern "C" fn probe_wrapper<T: SpiMethods>(
+        spi_dev: *mut bindings::spi_device,
+    ) -> c_types::c_int {
+        // SAFETY: The spi_dev pointer is provided by the kernel and is sure to be valid
+        match T::probe(SpiDevice::from_ptr(spi_dev)) {
+            Ok(_) => 0,
+            Err(e) => e.to_kernel_errno(),
+        }
+    }
+
+    unsafe extern "C" fn remove_wrapper<T: SpiMethods>(
+        spi_dev: *mut bindings::spi_device,
+    ) -> c_types::c_int {
+        // SAFETY: The spi_dev pointer is provided by the kernel and is sure to be valid
+        match T::remove(SpiDevice::from_ptr(spi_dev)) {
+            Ok(_) => 0,
+            Err(e) => e.to_kernel_errno(),
+        }
+    }
+
+    unsafe extern "C" fn shutdown_wrapper<T: SpiMethods>(spi_dev: *mut bindings::spi_device) {
+        // SAFETY: The spi_dev pointer is provided by the kernel and is sure to be valid
+        T::shutdown(SpiDevice::from_ptr(spi_dev))
+    }
+
     // FIXME: Add documentation
-    pub fn register(self: Pin<&mut Self>) -> Result {
+    pub fn register<T: SpiMethods>(self: Pin<&mut Self>) -> Result {
         let mut spi_driver = bindings::spi_driver::default();
         spi_driver.driver.name = self.name.as_ptr() as *const c_types::c_char;
-        spi_driver.probe = self.probe;
-        spi_driver.remove = self.remove;
-        spi_driver.shutdown = self.shutdown;
+        spi_driver.probe = Some(DriverRegistration::probe_wrapper::<T>);
+        spi_driver.remove = Some(DriverRegistration::remove_wrapper::<T>);
+        spi_driver.shutdown = Some(DriverRegistration::shutdown_wrapper::<T>);
 
         let this = unsafe { self.get_unchecked_mut() };
         if this.registered {
@@ -115,9 +133,6 @@ unsafe impl Sync for DriverRegistration {}
 // SAFETY: All functions work from any thread.
 unsafe impl Send for DriverRegistration {}
 
-type SpiMethod = unsafe extern "C" fn(*mut bindings::spi_device) -> c_types::c_int;
-type SpiMethodVoid = unsafe extern "C" fn(*mut bindings::spi_device) -> ();
-
 #[macro_export]
 macro_rules! spi_method {
     (fn $method_name:ident (mut $device_name:ident : SpiDevice) -> Result $block:block) => {
@@ -127,7 +142,7 @@ macro_rules! spi_method {
             fn inner(mut $device_name: SpiDevice) -> Result $block
 
             // SAFETY: The dev pointer is provided by the kernel and is sure to be valid
-            match inner(unsafe { SpiDevice::from_ptr(dev) }) {
+            match inner(unsafe { SpiDevice::from_ptr(spi_dev) }) {
                 Ok(_) => 0,
                 Err(e) => e.to_kernel_errno(),
             }
@@ -140,7 +155,7 @@ macro_rules! spi_method {
             fn inner(mut $device_name: SpiDevice) $block
 
             // SAFETY: The dev pointer is provided by the kernel and is sure to be valid
-            inner(unsafe { SpiDevice::from_ptr(dev) })
+            inner(unsafe { SpiDevice::from_ptr(spi_dev) })
         }
     };
 }
