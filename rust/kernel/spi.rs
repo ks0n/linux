@@ -27,8 +27,20 @@ pub struct DriverRegistration {
     spi_driver: Option<bindings::spi_driver>,
 }
 
+pub struct ToUse {
+    pub probe: bool,
+    pub remove: bool,
+    pub shutdown: bool,
+}
+
+pub const USE_NONE: ToUse = ToUse {
+    probe: false,
+    remove: false,
+    shutdown: false,
+};
+
 pub trait SpiMethods {
-    // const TO_USE?
+    const TO_USE: ToUse = USE_NONE;
 
     fn probe(_spi_dev: SpiDevice) -> Result {
         Ok(())
@@ -39,6 +51,19 @@ pub trait SpiMethods {
     }
 
     fn shutdown(_spi_dev: SpiDevice) {}
+}
+
+#[macro_export]
+macro_rules! declare_spi_methods {
+    () => {
+        const TO_USE: $crate::spi::ToUse = $crate::spi::USE_NONE;
+    };
+    ($($method:ident),+) => {
+        const TO_USE: $crate::spi::ToUse = $crate::spi::ToUse {
+            $($method: true),+,
+            ..$crate::spi::USE_NONE
+        };
+    };
 }
 
 impl DriverRegistration {
@@ -92,9 +117,19 @@ impl DriverRegistration {
     pub fn register<T: SpiMethods>(self: Pin<&mut Self>) -> Result {
         let mut spi_driver = bindings::spi_driver::default();
         spi_driver.driver.name = self.name.as_ptr() as *const c_types::c_char;
-        spi_driver.probe = Some(DriverRegistration::probe_wrapper::<T>);
-        spi_driver.remove = Some(DriverRegistration::remove_wrapper::<T>);
-        spi_driver.shutdown = Some(DriverRegistration::shutdown_wrapper::<T>);
+
+        match T::TO_USE.probe {
+            false => spi_driver.probe = None,
+            true => spi_driver.probe = Some(DriverRegistration::probe_wrapper::<T>),
+        }
+        match T::TO_USE.remove {
+            false => spi_driver.remove = None,
+            true => spi_driver.remove = Some(DriverRegistration::remove_wrapper::<T>),
+        }
+        match T::TO_USE.shutdown {
+            false => spi_driver.shutdown = None,
+            true => spi_driver.shutdown = Some(DriverRegistration::shutdown_wrapper::<T>),
+        }
 
         let this = unsafe { self.get_unchecked_mut() };
         if this.registered {
