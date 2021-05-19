@@ -168,33 +168,6 @@ unsafe impl Sync for DriverRegistration {}
 // SAFETY: All functions work from any thread.
 unsafe impl Send for DriverRegistration {}
 
-#[macro_export]
-macro_rules! spi_method {
-    (fn $method_name:ident (mut $device_name:ident : SpiDevice) -> Result $block:block) => {
-        unsafe extern "C" fn $method_name(dev: *mut kernel::bindings::spi_device) -> kernel::c_types::c_int {
-            use kernel::spi::SpiDevice;
-
-            fn inner(mut $device_name: SpiDevice) -> Result $block
-
-            // SAFETY: The dev pointer is provided by the kernel and is sure to be valid
-            match inner(unsafe { SpiDevice::from_ptr(spi_dev) }) {
-                Ok(_) => 0,
-                Err(e) => e.to_kernel_errno(),
-            }
-        }
-    };
-    (fn $method_name:ident (mut $device_name:ident : SpiDevice) $block:block) => {
-        unsafe extern "C" fn $method_name(dev: *mut kernel::bindings::spi_device) {
-            use kernel::spi::SpiDevice;
-
-            fn inner(mut $device_name: SpiDevice) $block
-
-            // SAFETY: The dev pointer is provided by the kernel and is sure to be valid
-            inner(unsafe { SpiDevice::from_ptr(spi_dev) })
-        }
-    };
-}
-
 pub struct Spi;
 
 impl Spi {
