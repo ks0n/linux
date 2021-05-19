@@ -85,7 +85,9 @@ impl DriverRegistration {
 
         this.spi_driver = Some(spi_driver);
 
-        let res = unsafe { bindings::__spi_register_driver(this.this_module.0, this.spi_driver.as_mut().unwrap()) };
+        let res = unsafe {
+            bindings::__spi_register_driver(this.this_module.0, this.spi_driver.as_mut().unwrap())
+        };
 
         match res {
             0 => {
