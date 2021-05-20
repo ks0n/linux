@@ -24,7 +24,7 @@ pub struct DriverRegistration {
     this_module: &'static crate::ThisModule,
     registered: bool,
     name: CStr<'static>,
-    spi_driver: Option<bindings::spi_driver>,
+    spi_driver: bindings::spi_driver,
 }
 
 pub struct ToUse {
@@ -42,15 +42,15 @@ pub const USE_NONE: ToUse = ToUse {
 pub trait SpiMethods {
     const TO_USE: ToUse;
 
-    fn probe(_spi_dev: SpiDevice) -> Result {
+    fn probe(mut _spi_dev: SpiDevice) -> Result {
         Ok(())
     }
 
-    fn remove(_spi_dev: SpiDevice) -> Result {
+    fn remove(mut _spi_dev: SpiDevice) -> Result {
         Ok(())
     }
 
-    fn shutdown(_spi_dev: SpiDevice) {}
+    fn shutdown(mut _spi_dev: SpiDevice) {}
 }
 
 /// Populate the TO_USE field in the `SpiMethods` implementer
@@ -97,7 +97,7 @@ impl DriverRegistration {
             this_module,
             name,
             registered: false,
-            spi_driver: None,
+            spi_driver: bindings::spi_driver::default(),
         }
     }
 
@@ -147,23 +147,23 @@ impl DriverRegistration {
             }
         }
 
-        let mut spi_driver = bindings::spi_driver::default();
-        spi_driver.driver.name = self.name.as_ptr() as *const c_types::c_char;
-
-        spi_driver.probe = maybe_get_wrapper(T::TO_USE.probe, DriverRegistration::probe_wrapper::<T>);
-        spi_driver.remove = maybe_get_wrapper(T::TO_USE.remove, DriverRegistration::remove_wrapper::<T>);
-        spi_driver.shutdown = maybe_get_wrapper(T::TO_USE.shutdown, DriverRegistration::shutdown_wrapper::<T>);
-
         let this = unsafe { self.get_unchecked_mut() };
         if this.registered {
             return Err(Error::EINVAL);
         }
 
-        this.spi_driver = Some(spi_driver);
+        this.spi_driver.driver.name = this.name.as_ptr() as *const c_types::c_char;
+        this.spi_driver.probe =
+            maybe_get_wrapper(T::TO_USE.probe, DriverRegistration::probe_wrapper::<T>);
+        this.spi_driver.remove =
+            maybe_get_wrapper(T::TO_USE.remove, DriverRegistration::remove_wrapper::<T>);
+        this.spi_driver.shutdown = maybe_get_wrapper(
+            T::TO_USE.shutdown,
+            DriverRegistration::shutdown_wrapper::<T>,
+        );
 
-        let res = unsafe {
-            bindings::__spi_register_driver(this.this_module.0, this.spi_driver.as_mut().unwrap())
-        };
+        let res =
+            unsafe { bindings::__spi_register_driver(this.this_module.0, &mut this.spi_driver) };
 
         match res {
             0 => {
@@ -177,8 +177,7 @@ impl DriverRegistration {
 
 impl Drop for DriverRegistration {
     fn drop(&mut self) {
-        unsafe { bindings::driver_unregister(&mut self.spi_driver.as_mut().unwrap().driver) }
-        // FIXME: No unwrap? But it's safe?
+        unsafe { bindings::driver_unregister(&mut self.spi_driver.driver) }
     }
 }
 
