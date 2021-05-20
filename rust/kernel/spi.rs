@@ -27,7 +27,7 @@ pub struct DriverRegistration {
     probe: Option<SpiMethod>,
     remove: Option<SpiMethod>,
     shutdown: Option<SpiMethodVoid>,
-    spi_driver: Option<bindings::spi_driver>,
+    spi_driver: bindings::spi_driver,
 }
 
 impl DriverRegistration {
@@ -45,7 +45,7 @@ impl DriverRegistration {
             probe,
             remove,
             shutdown,
-            spi_driver: None,
+            spi_driver: bindings::spi_driver::default(),
         }
     }
 
@@ -72,20 +72,18 @@ impl DriverRegistration {
 
     // FIXME: Add documentation
     pub fn register(self: Pin<&mut Self>) -> Result {
-        let mut spi_driver = bindings::spi_driver::default();
-        spi_driver.driver.name = self.name.as_ptr() as *const c_types::c_char;
-        spi_driver.probe = self.probe;
-        spi_driver.remove = self.remove;
-        spi_driver.shutdown = self.shutdown;
-
         let this = unsafe { self.get_unchecked_mut() };
         if this.registered {
             return Err(Error::EINVAL);
         }
 
-        this.spi_driver = Some(spi_driver);
+        this.spi_driver.driver.name = this.name.as_ptr() as *const c_types::c_char;
+        this.spi_driver.probe = this.probe;
+        this.spi_driver.remove = this.remove;
+        this.spi_driver.shutdown = this.shutdown;
 
-        let res = unsafe { bindings::__spi_register_driver(this.this_module.0, &mut spi_driver) };
+        let res =
+            unsafe { bindings::__spi_register_driver(this.this_module.0, &mut this.spi_driver) };
 
         match res {
             0 => {
@@ -99,8 +97,7 @@ impl DriverRegistration {
 
 impl Drop for DriverRegistration {
     fn drop(&mut self) {
-        unsafe { bindings::driver_unregister(&mut self.spi_driver.unwrap().driver) }
-        // FIXME: No unwrap? But it's safe?
+        unsafe { bindings::driver_unregister(&mut self.spi_driver.driver) }
     }
 }
 
