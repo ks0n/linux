@@ -40,7 +40,7 @@ pub const USE_NONE: ToUse = ToUse {
 };
 
 pub trait SpiMethods {
-    const TO_USE: ToUse = USE_NONE;
+    const TO_USE: ToUse;
 
     fn probe(_spi_dev: SpiDevice) -> Result {
         Ok(())
@@ -53,6 +53,31 @@ pub trait SpiMethods {
     fn shutdown(_spi_dev: SpiDevice) {}
 }
 
+/// Populate the TO_USE field in the `SpiMethods` implementer
+///
+/// ```rust
+/// impl SpiMethods for MySpiMethods {
+///     /// Let's say you only want a probe and remove method, no shutdown
+///     declare_spi_methods!(probe, remove);
+///
+///     /// Define your probe and remove methods. If you don't, default implementations
+///     /// will be used instead. These default implementations do NOT correspond to the
+///     /// kernel's default implementations! If you wish to use the Kernel's default
+///     /// spi functions implementations, do not declare them using the `declare_spi_methods`
+///     /// macro. For example, here our Driver will use the Kernel's shutdown method.
+///     fn probe(spi_dev: SpiDevice) -> Result {
+///         // ...
+///
+///         Ok(())
+///     }
+///
+///     fn remove(spi_dev: SpiDevice) -> Result {
+///         // ...
+///
+///         Ok(())
+///     }
+/// }
+/// ```
 #[macro_export]
 macro_rules! declare_spi_methods {
     () => {
@@ -115,21 +140,19 @@ impl DriverRegistration {
 
     // FIXME: Add documentation
     pub fn register<T: SpiMethods>(self: Pin<&mut Self>) -> Result {
+        fn maybe_get_wrapper<F>(vtable_value: bool, func: F) -> Option<F> {
+            match vtable_value {
+                false => None,
+                true => Some(func),
+            }
+        }
+
         let mut spi_driver = bindings::spi_driver::default();
         spi_driver.driver.name = self.name.as_ptr() as *const c_types::c_char;
 
-        match T::TO_USE.probe {
-            false => spi_driver.probe = None,
-            true => spi_driver.probe = Some(DriverRegistration::probe_wrapper::<T>),
-        }
-        match T::TO_USE.remove {
-            false => spi_driver.remove = None,
-            true => spi_driver.remove = Some(DriverRegistration::remove_wrapper::<T>),
-        }
-        match T::TO_USE.shutdown {
-            false => spi_driver.shutdown = None,
-            true => spi_driver.shutdown = Some(DriverRegistration::shutdown_wrapper::<T>),
-        }
+        spi_driver.probe = maybe_get_wrapper(T::TO_USE.probe, DriverRegistration::probe_wrapper::<T>);
+        spi_driver.remove = maybe_get_wrapper(T::TO_USE.remove, DriverRegistration::remove_wrapper::<T>);
+        spi_driver.shutdown = maybe_get_wrapper(T::TO_USE.shutdown, DriverRegistration::shutdown_wrapper::<T>);
 
         let this = unsafe { self.get_unchecked_mut() };
         if this.registered {
