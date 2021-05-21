@@ -42,15 +42,15 @@ pub const USE_NONE: ToUse = ToUse {
 pub trait SpiMethods {
     const TO_USE: ToUse;
 
-    fn probe(_spi_dev: SpiDevice) -> Result {
+    fn probe(mut _spi_dev: SpiDevice) -> Result {
         Ok(())
     }
 
-    fn remove(_spi_dev: SpiDevice) -> Result {
+    fn remove(mut _spi_dev: SpiDevice) -> Result {
         Ok(())
     }
 
-    fn shutdown(_spi_dev: SpiDevice) {}
+    fn shutdown(mut _spi_dev: SpiDevice) {}
 }
 
 /// Populate the TO_USE field in the `SpiMethods` implementer
