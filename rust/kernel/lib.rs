@@ -21,8 +21,7 @@
     const_panic,
     const_raw_ptr_deref,
     const_unreachable_unchecked,
-    try_reserve,
-    bool_to_option
+    try_reserve
 )]
 #![deny(clippy::complexity)]
 #![deny(clippy::correctness)]
