@@ -3,7 +3,7 @@
 use crate::bindings;
 use crate::c_types;
 use crate::error::{Error, Result};
-use crate::CStr;
+use crate::str::CStr;
 use alloc::boxed::Box;
 use core::pin::Pin;
 
@@ -23,7 +23,7 @@ impl SpiDevice {
 pub struct DriverRegistration {
     this_module: &'static crate::ThisModule,
     registered: bool,
-    name: CStr<'static>,
+    name: &'static CStr,
     spi_driver: bindings::spi_driver,
 }
 
@@ -92,7 +92,7 @@ macro_rules! declare_spi_methods {
 }
 
 impl DriverRegistration {
-    fn new(this_module: &'static crate::ThisModule, name: CStr<'static>) -> Self {
+    fn new(this_module: &'static crate::ThisModule, name: &'static CStr) -> Self {
         DriverRegistration {
             this_module,
             name,
@@ -104,7 +104,7 @@ impl DriverRegistration {
     // FIXME: Add documentation
     pub fn new_pinned<T: SpiMethods>(
         this_module: &'static crate::ThisModule,
-        name: CStr<'static>,
+        name: &'static CStr,
     ) -> Result<Pin<Box<Self>>> {
         let mut registration = Pin::from(Box::try_new(Self::new(this_module, name))?);
 
