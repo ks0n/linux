@@ -140,38 +140,31 @@ impl DriverRegistration {
 
     // FIXME: Add documentation
     pub fn register<T: SpiMethods>(self: Pin<&mut Self>) -> Result {
-        fn maybe_get_wrapper<F>(vtable_value: bool, func: F) -> Option<F> {
-            match vtable_value {
-                false => None,
-                true => Some(func),
-            }
-        }
-
         let this = unsafe { self.get_unchecked_mut() };
         if this.registered {
             return Err(Error::EINVAL);
         }
 
         this.spi_driver.driver.name = this.name.as_ptr() as *const c_types::c_char;
-        this.spi_driver.probe =
-            maybe_get_wrapper(T::TO_USE.probe, DriverRegistration::probe_wrapper::<T>);
-        this.spi_driver.remove =
-            maybe_get_wrapper(T::TO_USE.remove, DriverRegistration::remove_wrapper::<T>);
-        this.spi_driver.shutdown = maybe_get_wrapper(
-            T::TO_USE.shutdown,
-            DriverRegistration::shutdown_wrapper::<T>,
-        );
+        this.spi_driver.probe = T::TO_USE
+            .probe
+            .then(|| DriverRegistration::probe_wrapper::<T> as _);
+        this.spi_driver.remove = T::TO_USE
+            .remove
+            .then(|| DriverRegistration::remove_wrapper::<T> as _);
+        this.spi_driver.shutdown = T::TO_USE
+            .shutdown
+            .then(|| DriverRegistration::shutdown_wrapper::<T> as _);
 
         let res =
             unsafe { bindings::__spi_register_driver(this.this_module.0, &mut this.spi_driver) };
 
-        match res {
-            0 => {
-                this.registered = true;
-                Ok(())
-            }
-            _ => Err(Error::from_kernel_errno(res)),
+        if res != 0 {
+            return Err(Error::from_kernel_errno(res));
         }
+
+        this.registered = true;
+        Ok(())
     }
 }
 
@@ -210,12 +203,10 @@ impl Spi {
         }
     }
 
-    #[inline]
     pub fn write(dev: &mut SpiDevice, tx_buf: &[u8]) -> Result {
         Spi::write_then_read(dev, tx_buf, &mut [0u8; 0])
     }
 
-    #[inline]
     pub fn read(dev: &mut SpiDevice, rx_buf: &mut [u8]) -> Result {
         Spi::write_then_read(dev, &[0u8; 0], rx_buf)
     }
