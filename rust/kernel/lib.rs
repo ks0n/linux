@@ -22,7 +22,7 @@
     const_raw_ptr_deref,
     const_unreachable_unchecked,
     try_reserve,
-    bool_to_option,
+    bool_to_option
 )]
 #![deny(clippy::complexity)]
 #![deny(clippy::correctness)]
