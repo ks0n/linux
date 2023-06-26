@@ -6,7 +6,9 @@
 //! C header: [`include/linux/spi/spi.h`](../../../../include/linux/spi/spi.h)
 
 use crate::bindings;
+use crate::c_str;
 use crate::error::{code::*, from_result, Error, Result};
+use crate::static_assert;
 use crate::str::CStr;
 use alloc::boxed::Box;
 use core::marker::PhantomData;
@@ -63,16 +65,22 @@ pub struct DriverRegistration<T: SpiMethods> {
     this_module: &'static crate::ThisModule,
     registered: bool,
     name: &'static CStr,
+    id_table: Option<&'static [SpiDeviceId]>,
     spi_driver: bindings::spi_driver,
     _p: PhantomData<T>,
 }
 
 impl<T: SpiMethods> DriverRegistration<T> {
-    fn new(this_module: &'static crate::ThisModule, name: &'static CStr) -> Self {
+    fn new(
+        this_module: &'static crate::ThisModule,
+        name: &'static CStr,
+        id_table: Option<&'static [SpiDeviceId]>,
+    ) -> Self {
         DriverRegistration {
             this_module,
             name,
             registered: false,
+            id_table,
             spi_driver: bindings::spi_driver::default(),
             _p: PhantomData,
         }
@@ -90,8 +98,9 @@ impl<T: SpiMethods> DriverRegistration<T> {
     pub fn new_pinned(
         this_module: &'static crate::ThisModule,
         name: &'static CStr,
+        id_table: Option<&'static [SpiDeviceId]>,
     ) -> Result<Pin<Box<Self>>> {
-        let mut registration = Pin::from(Box::try_new(Self::new(this_module, name))?);
+        let mut registration = Pin::from(Box::try_new(Self::new(this_module, name, id_table))?);
 
         registration.as_mut().register()?;
 
@@ -110,6 +119,10 @@ impl<T: SpiMethods> DriverRegistration<T> {
         }
 
         let mut spi_driver = this.spi_driver;
+
+        if let Some(id_table) = this.id_table {
+            spi_driver.id_table = id_table.as_ptr() as *const bindings::spi_device_id;
+        }
 
         if T::HAS_PROBE {
             spi_driver.probe = Some(probe_callback::<T>);
@@ -169,6 +182,78 @@ unsafe impl<T: SpiMethods> Sync for DriverRegistration<T> {}
 
 // SAFETY: All functions work from any thread.
 unsafe impl<T: SpiMethods> Send for DriverRegistration<T> {}
+
+/// We need a union because we can't get an address from a pointer at compile time.
+#[repr(C)]
+union DriverData {
+    ptr: &'static (),
+    val: usize,
+}
+
+/// Wrapper struct around the kernel's `struct spi_device_id`.
+#[repr(C)]
+pub struct SpiDeviceId {
+    name: [i8; 32],
+    driver_data: DriverData,
+}
+
+static_assert!(
+    core::mem::size_of::<SpiDeviceId>() == core::mem::size_of::<bindings::spi_device_id>()
+);
+
+impl SpiDeviceId {
+    /// Creates a new [SpiDeviceId] with a given name.
+    /// <p style="background:rgba(255,181,77,0.16);padding:0.75em;">
+    /// <strong>Warning:</strong> The name will be truncated to a maximum of 32 chars
+    /// </p>
+    ///
+    /// To specify `driver_data` content, see [SpiDeviceId::with_driver_data_pointer] and
+    /// [SpiDeviceId::with_driver_data_number].
+    pub const fn new(name: &CStr) -> Self {
+        let name = name.as_bytes_with_nul();
+        let name_len = name.len();
+
+        let mut array = [0; 32];
+        let min_len = if name_len > 32 { 32 } else { name_len };
+
+        let mut i = 0;
+        while i < min_len {
+            array[i] = name[i] as i8;
+            i += 1;
+        }
+
+        SpiDeviceId {
+            name: array,
+            driver_data: DriverData { val: 0 },
+        }
+    }
+
+    /// Add a pointer to the `driver_data` field.
+    pub const fn with_driver_data_pointer<T>(mut self, driver_data: &'static T) -> Self {
+        // SAFETY: On the C side this will only be used as an integer, we don't care about the
+        // type. This function is called with a reference so the deref is safe as the pointer is
+        // valid
+        self.driver_data = DriverData {
+            ptr: unsafe { &*(driver_data as *const T as *const ()) },
+        };
+
+        // unsafe { core::mem::transmute::<&T, bindings::kernel_ulong_t>(driver_data) };
+        self
+    }
+
+    /// Add a number to the `driver_data` field.
+    pub const fn with_driver_data_number(mut self, driver_data: usize) -> Self {
+        self.driver_data = DriverData { val: driver_data };
+
+        self
+    }
+
+    /// Used for creating a sentinel to place at the end of an array of [SpiDeviceId].
+    pub const fn sentinel() -> Self {
+        // TODO: call Default trait instead when #![feature(const_trait_impl)] is stabilized
+        Self::new(c_str!(""))
+    }
+}
 
 /// High level abstraction over the kernel's SPI functions such as `spi_write_then_read`.
 // TODO this should be a mod, right?
