@@ -255,6 +255,49 @@ impl SpiDeviceId {
     }
 }
 
+/// Wrapper struct around the kernel's `struct spi_transfer`.
+pub struct SpiTransfer(bindings::spi_transfer);
+
+impl SpiTransfer {
+    pub fn new() -> Self {
+        SpiTransfer(bindings::spi_transfer::default())
+    }
+
+    pub fn with_tx_buf(mut self, buf: &[u8]) -> Self {
+        // Make sure no tx_buf nor rx_buf has been provided before
+        // TODO: replace with a `Result`
+        assert!(self.0.len == 0);
+
+        self.0.tx_buf = buf.as_ptr() as *const core::ffi::c_void;
+        self.0.len = buf.len() as core::ffi::c_uint;
+
+        self
+    }
+
+    pub fn with_rx_buf(mut self, buf: &mut[u8]) -> Self {
+        // Make sure no tx_buf nor rx_buf has been provided before
+        // TODO: replace with a `Result`
+        assert!(self.0.len == 0);
+
+        self.0.rx_buf = buf.as_mut_ptr() as *mut core::ffi::c_void;
+        self.0.len = buf.len() as core::ffi::c_uint;
+
+        self
+    }
+}
+
+#[derive(Default)]
+pub struct SpiMessage(bindings::spi_message);
+
+impl SpiMessage {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    /// Equivalent of `spi_message_init`
+    pub fn spi_message_init(&mut self) {
+    }
+}
+
 /// High level abstraction over the kernel's SPI functions such as `spi_write_then_read`.
 // TODO this should be a mod, right?
 pub struct Spi;
