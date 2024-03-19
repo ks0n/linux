@@ -295,6 +295,7 @@ impl SpiMessage {
     }
     /// Equivalent of `spi_message_init`
     pub fn spi_message_init(&mut self) {
+        unsafe { bindings::spi_message_init(&mut self.0) }
     }
 }
 
