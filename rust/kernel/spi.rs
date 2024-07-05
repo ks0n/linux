@@ -196,4 +196,25 @@ unsafe impl<T> RawDeviceId for SpiDeviceId<T> {
     };
 }
 
+/// Corresponds to the kernel's `spi_write_then_read`.
+///
+/// # Examples
+///
+/// ```
+/// let to_write = "rust-for-linux".as_bytes();
+/// let mut to_receive = [0u8; 10]; // let's receive 10 bytes back
+///
+/// // `spi_device` was previously provided by the kernel in that case
+/// let transfer_result = Spi::write_then_read(spi_device, &to_write, &mut to_receive);
+/// ```
+pub fn write_then_read(spi: &mut SpiDevice, txbuf: &[u8], rxbuf: &mut [u8]) -> Result {
+    to_result(unsafe {
+        bindings::spi_write_then_read(
+            spi.to_ptr(),
+            txbuf.as_ptr() as *const core::ffi::c_void,
+            txbuf.len() as core::ffi::c_uint,
+            rxbuf.as_ptr() as *mut core::ffi::c_void,
+            rxbuf.len() as core::ffi::c_uint)
+    })
 }
+
